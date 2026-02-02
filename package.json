@@ -1,6 +1,6 @@
 {
   "name": "my-figma-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "mcpName": "MCP for Figma",
   "description": "Forked MCP to from https://github.com/GLips/Figma-Context-MCP?tab=readme-ov-file",
   "type": "module",

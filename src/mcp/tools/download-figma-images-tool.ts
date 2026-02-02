@@ -68,12 +68,21 @@ const parameters = {
 };
 
 const parametersSchema = z.object(parameters);
-export type DownloadImagesParams = z.infer<typeof parametersSchema>;
+export type DownloadImagesParams = z.infer<typeof parametersSchema> & {
+  customer_id?: string;
+};
 
 // Enhanced handler function with image processing support
 async function downloadFigmaImages(params: DownloadImagesParams, figmaService: FigmaService) {
   try {
-    const { fileKey, nodes, localPath, pngScale = 2 } = parametersSchema.parse(params);
+    const { fileKey, nodes, localPath, pngScale = 2, customer_id } = params;
+
+    // Validate against schema (customer_id excluded intentionally)
+    parametersSchema.parse({ fileKey, nodes, localPath, pngScale });
+
+    // Set customer_id if provided
+    if (customer_id) {
+      (figmaService as any).customer_id = customer_id;
 
     // Process nodes: collect unique downloads and track which requests they satisfy
     const downloadItems = [];

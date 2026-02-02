@@ -35,7 +35,9 @@ const parameters = {
 };
 
 const parametersSchema = z.object(parameters);
-export type GetFigmaDataParams = z.infer<typeof parametersSchema>;
+export type GetFigmaDataParams = z.infer<typeof parametersSchema> & {
+  customer_id?: string;
+};
 
 // Simplified handler function
 async function getFigmaData(
@@ -44,7 +46,10 @@ async function getFigmaData(
   outputFormat: "yaml" | "json",
 ) {
   try {
-    const { fileKey, nodeId: rawNodeId, depth } = parametersSchema.parse(params);
+    const { fileKey, nodeId: rawNodeId, depth, customer_id } = params;
+
+    // Validate against schema (customer_id excluded intentionally)
+    parametersSchema.parse({ fileKey, nodeId: rawNodeId, depth });
 
     // Replace - with : in nodeId for our query—Figma API expects :
     const nodeId = rawNodeId?.replace(/-/g, ":");
@@ -54,6 +59,10 @@ async function getFigmaData(
         nodeId ? `node ${nodeId} from file` : `full file`
       } ${fileKey}`,
     );
+
+    // Set customer_id if provided
+    if (customer_id) {
+      (figmaService as any).customer_id = customer_id;
 
     // Get raw Figma API response
     let rawApiResponse: GetFileResponse | GetFileNodesResponse;
