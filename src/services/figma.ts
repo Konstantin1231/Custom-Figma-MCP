@@ -50,7 +50,7 @@ export class FigmaService {
       headers["X-Customer-Id"] = this.customer_id;
       Logger.log(`Including customer_id in request headers: ${this.customer_id}`);
     }
-    
+        
     return headers;
   }
 

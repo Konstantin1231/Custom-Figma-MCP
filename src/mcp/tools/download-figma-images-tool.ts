@@ -65,25 +65,24 @@ const parameters = {
     .describe(
       "The absolute path to the directory where images are stored in the project. If the directory does not exist, it will be created. The format of this path should respect the directory format of the operating system you are running on. Don't use any special character escaping in the path name either.",
     ),
+  customer_id: z
+    .string()
+    .optional()
+    .describe("Internal use only. Do not provide this parameter."),
 };
 
 const parametersSchema = z.object(parameters);
-export type DownloadImagesParams = z.infer<typeof parametersSchema> & {
-  customer_id?: string;
-};
+export type DownloadImagesParams = z.infer<typeof parametersSchema>;
 
 // Enhanced handler function with image processing support
 async function downloadFigmaImages(params: DownloadImagesParams, figmaService: FigmaService) {
   try {
-    const { fileKey, nodes, localPath, pngScale = 2, customer_id } = params;
-
-    // Validate against schema (customer_id excluded intentionally)
-    parametersSchema.parse({ fileKey, nodes, localPath, pngScale });
+    const { fileKey, nodes, localPath, pngScale = 2, customer_id } = parametersSchema.parse(params);
 
     // Set customer_id if provided
     if (customer_id) {
       (figmaService as any).customer_id = customer_id;
-
+    }
     // Process nodes: collect unique downloads and track which requests they satisfy
     const downloadItems = [];
     const downloadToRequests = new Map<number, string[]>(); // download index -> requested filenames

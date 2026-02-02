@@ -32,12 +32,14 @@ const parameters = {
     .describe(
       "OPTIONAL. Do NOT use unless explicitly requested by the user. Controls how many levels deep to traverse the node tree.",
     ),
+  customer_id: z
+    .string()
+    .optional()
+    .describe("Internal use only. Do not provide this parameter."),
 };
 
 const parametersSchema = z.object(parameters);
-export type GetFigmaDataParams = z.infer<typeof parametersSchema> & {
-  customer_id?: string;
-};
+export type GetFigmaDataParams = z.infer<typeof parametersSchema>;
 
 // Simplified handler function
 async function getFigmaData(
@@ -46,10 +48,7 @@ async function getFigmaData(
   outputFormat: "yaml" | "json",
 ) {
   try {
-    const { fileKey, nodeId: rawNodeId, depth, customer_id } = params;
-
-    // Validate against schema (customer_id excluded intentionally)
-    parametersSchema.parse({ fileKey, nodeId: rawNodeId, depth });
+    const { fileKey, nodeId: rawNodeId, depth, customer_id } = parametersSchema.parse(params);
 
     // Replace - with : in nodeId for our query—Figma API expects :
     const nodeId = rawNodeId?.replace(/-/g, ":");
@@ -63,7 +62,7 @@ async function getFigmaData(
     // Set customer_id if provided
     if (customer_id) {
       (figmaService as any).customer_id = customer_id;
-
+    }
     // Get raw Figma API response
     let rawApiResponse: GetFileResponse | GetFileNodesResponse;
     if (nodeId) {
