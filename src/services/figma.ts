@@ -26,7 +26,7 @@ export class FigmaService {
   private readonly apiKey: string;
   private readonly oauthToken: string;
   private readonly useOAuth: boolean;
-  private readonly baseUrl = "https://api.figma.com/v1";
+  private readonly baseUrl = process.env.MCP_SERVER_URL || "https://api.figma.com/v1";
 
   constructor({ figmaApiKey, figmaOAuthToken, useOAuth }: FigmaAuthOptions) {
     this.apiKey = figmaApiKey || "";

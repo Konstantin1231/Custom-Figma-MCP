@@ -29,6 +29,7 @@ function maskApiKey(key: string): string {
 interface CliArgs {
   "figma-api-key"?: string;
   "figma-oauth-token"?: string;
+  "mcp-server-url"?: string;
   env?: string;
   port?: number;
   host?: string;
@@ -47,6 +48,11 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
       "figma-oauth-token": {
         type: "string",
         description: "Figma OAuth Bearer token",
+      },
+      "mcp-server-url": {
+        type: "string",
+        description:
+          "Override the Figma API base URL (e.g. to use a proxy). Default: https://api.figma.com/v1",
       },
       env: {
         type: "string",
@@ -130,6 +136,11 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     auth.figmaOAuthToken = process.env.FIGMA_OAUTH_TOKEN;
     config.configSources.figmaOAuthToken = "env";
     auth.useOAuth = true;
+  }
+
+  // Handle MCP_SERVER_URL (Figma API base URL override)
+  if (argv["mcp-server-url"]) {
+    process.env.MCP_SERVER_URL = argv["mcp-server-url"];
   }
 
   // Handle PORT (FRAMELINK_PORT takes precedence, PORT is fallback for backwards compatibility)
