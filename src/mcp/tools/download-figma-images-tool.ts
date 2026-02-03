@@ -77,6 +77,10 @@ const parameters = {
     .describe(
       "The path to the directory where images should be saved, relative to the project root. If the directory does not exist, it will be created. Use forward slashes for path separators (e.g., 'public/images' or 'assets/icons').",
     ),
+  customer_id: z
+    .string()
+    .optional()
+    .describe("Internal use only. Do not provide this parameter."),
 };
 
 const parametersSchema = z.object(parameters);
@@ -90,7 +94,7 @@ async function downloadFigmaImages(
   extra: ToolExtra,
 ) {
   try {
-    const { fileKey, nodes, localPath, pngScale = 2 } = parametersSchema.parse(params);
+    const { fileKey, nodes, localPath, pngScale = 2, customer_id } = parametersSchema.parse(params);
 
     // Resolve localPath relative to the configured image directory.
     // path.join (not path.resolve) so a leading "/" is treated as relative, not absolute —
@@ -113,6 +117,10 @@ async function downloadFigmaImages(
 
     await sendProgress(extra, 0, 3, "Resolving image downloads");
 
+    // Set customer_id if provided
+    if (customer_id) {
+      (figmaService as any).customer_id = customer_id;
+    }
     // Process nodes: collect unique downloads and track which requests they satisfy
     const downloadItems = [];
     const downloadToRequests = new Map<number, string[]>(); // download index -> requested filenames
