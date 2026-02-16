@@ -10,59 +10,64 @@ const parameters = {
     .regex(/^[a-zA-Z0-9]+$/, "File key must be alphanumeric")
     .describe("The key of the Figma file containing the images"),
   nodes: z
-    .object({
-      nodeId: z
-        .string()
-        .regex(
-          /^I?\d+[:|-]\d+(?:;\d+[:|-]\d+)*$/,
-          "Node ID must be like '1234:5678' or 'I5666:180910;1:10515;1:10336'",
-        )
-        .describe("The ID of the Figma image node to fetch, formatted as 1234:5678"),
-      imageRef: z
-        .string()
-        .optional()
-        .describe(
-          "If a node has an imageRef fill, you must include this variable. Leave blank when downloading Vector SVG images or animated GIFs (use gifRef instead).",
-        ),
-      gifRef: z
-        .string()
-        .optional()
-        .describe(
-          "If a node has a gifRef fill (animated GIF), you must include this variable to download the animated GIF. When gifRef is present in the Figma data, use it instead of imageRef to get the animated file rather than a static snapshot.",
-        ),
-      fileName: z
-        .string()
-        .regex(
-          /^[a-zA-Z0-9_.-]+\.(png|svg|gif)$/,
-          "File names must contain only letters, numbers, underscores, dots, or hyphens, and end with .png, .svg, or .gif.",
-        )
-        .describe(
-          "The local name for saving the fetched file, including extension. png, svg, or gif.",
-        ),
-      needsCropping: z
-        .boolean()
-        .optional()
-        .describe("Whether this image needs cropping based on its transform matrix"),
-      cropTransform: z
-        .array(z.array(z.number()))
-        .optional()
-        .describe("Figma transform matrix for image cropping"),
-      requiresImageDimensions: z
-        .boolean()
-        .optional()
-        .describe("Whether this image requires dimension information for CSS variables"),
-      filenameSuffix: z
-        .string()
-        .regex(
+    .array(
+      z.object({
+        nodeId: z
+          .string()
+          .regex(
+            /^I?\d+[:|-]\d+(?:;\d+[:|-]\d+)*$/,
+            "Node ID must be like '1234:5678' or 'I5666:180910;1:10515;1:10336'",
+          )
+          .describe("The ID of the Figma image node to fetch, formatted as 1234:5678"),
+        imageRef: z
+          .string()
+          .nullable()
+          .describe(
+            "If a node has an imageRef fill, include it; if not needed, use None (e.g., for SVG vectors) or animated GIFs (use gifRef instead).",
+          ),
+        gifRef: z
+          .string()
+          .optional()
+          .describe(
+            "If a node has a gifRef fill (animated GIF), you must include this variable to download the animated GIF. When gifRef is present in the Figma data, use it instead of imageRef to get the animated file rather than a static snapshot.",
+          ),
+        fileName: z
+          .string()
+          .regex(
+            /^[a-zA-Z0-9_.-]+\.(png|svg|gif)$/,
+            "File names must contain only letters, numbers, underscores, dots, or hyphens, and end with .png, .svg, or .gif.",
+          )
+          .describe(
+            "The local name for saving the fetched file, including extension. png, svg, or gif.",
+          ),
+        needsCropping: z
+          .boolean()
+          .nullable()
+          .describe(
+            "Whether this image needs cropping based on its transform matrix. If not needed, use None.",
+          ),
+        cropTransform: z
+          .array(z.array(z.number()))
+          .nullable()
+          .describe("Figma transform matrix for image cropping. If not needed, use None."),
+        requiresImageDimensions: z
+          .boolean()
+          .nullable()
+          .describe(
+            "Whether this image requires dimension information for CSS variables. If not needed, use None.",
+          ),
+        filenameSuffix: z
+          .string()
+          .regex(
           /^[a-zA-Z0-9_-]+$/,
           "Suffix must contain only letters, numbers, underscores, or hyphens",
         )
-        .optional()
+        .nullable()
         .describe(
-          "Suffix to add to filename for unique cropped images, provided in the Figma data (e.g., 'abc123')",
+            "Suffix to add to filename for unique cropped images, provided in the Figma data (e.g., 'abc123'). If not needed, use None.",
         ),
-    })
-    .array()
+      }),
+    )
     .describe("The nodes to fetch as images"),
   pngScale: z
     .number()
