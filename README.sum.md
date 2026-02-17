@@ -313,4 +313,8 @@ Why this order: raw Figma data is fetched first, then normalized into a `Simplif
   - Inputs: element with `visible` or a number.
   - Output: boolean or rounded number.
   - Used in: `extractFromDesign()` and layout calculations in [src/extractors/node-walker.ts](src/extractors/node-walker.ts) and [src/transformers/layout.ts](src/transformers/layout.ts).
+<<<<<<< HEAD
   - Why: Normalize visibility filtering and numerical precision across the pipeline.
+=======
+  - Why: Normalize visibility filtering and numerical precision across the pipeline.
+>>>>>>> 7edba50 (Add README files, update package.json, and enhance Figma tools with customer token support)
