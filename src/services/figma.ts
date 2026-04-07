@@ -15,6 +15,7 @@ export type FigmaAuthOptions = {
   figmaApiKey: string;
   figmaOAuthToken: string;
   useOAuth: boolean;
+  mcpServerUrl?: string;
 };
 
 type SvgOptions = {
@@ -27,28 +28,24 @@ export class FigmaService {
   private readonly apiKey: string;
   private readonly oauthToken: string;
   private readonly useOAuth: boolean;
-  private readonly baseUrl = "https://api.figma.com/v1";
+  private readonly baseUrl: string;
+  public customerToken?: string;
 
-  constructor({ figmaApiKey, figmaOAuthToken, useOAuth }: FigmaAuthOptions) {
+  constructor({ figmaApiKey, figmaOAuthToken, useOAuth, mcpServerUrl }: FigmaAuthOptions) {
     this.apiKey = figmaApiKey || "";
     this.oauthToken = figmaOAuthToken || "";
     this.useOAuth = !!useOAuth && !!this.oauthToken;
+    this.baseUrl = (mcpServerUrl || "https://api.figma.com/v1").replace(/\/+$/, "");
   }
 
   private getAuthHeaders(): Record<string, string> {
     if (this.useOAuth) {
       Logger.log("Using OAuth Bearer token for authentication");
-      return { Authorization: `Bearer ${this.oauthToken}` };
+      return { Authorization: `Bearer ${this.customerToken || this.oauthToken}` };
+    } else {
+      Logger.log("Using Personal Access Token for authentication");
+      return { "X-Figma-Token": this.customerToken || this.apiKey };
     }
-
-    if (!this.apiKey) {
-      throw new Error(
-        "Figma API authentication is required. Configure FIGMA_API_KEY or FIGMA_OAUTH_TOKEN on the server, or send X-Figma-Token / Authorization: Bearer on the HTTP request.",
-      );
-    }
-
-    Logger.log("Using Personal Access Token for authentication");
-    return { "X-Figma-Token": this.apiKey };
   }
 
   /**

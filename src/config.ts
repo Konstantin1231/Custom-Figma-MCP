@@ -103,6 +103,7 @@ export function resolveAuth(flags: {
     figmaApiKey: figmaApiKey.value,
     figmaOAuthToken: figmaOauthToken.value,
     useOAuth,
+    mcpServerUrl: mcpServerUrl.value,
   };
 
   return auth;
