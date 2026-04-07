@@ -25,22 +25,28 @@ export class FigmaService {
   private readonly apiKey: string;
   private readonly oauthToken: string;
   private readonly useOAuth: boolean;
-  private readonly baseUrl = "https://api.figma.com/v1";
+  private readonly baseUrl: string;
+  public customer_token?: string;
 
   constructor({ figmaApiKey, figmaOAuthToken, useOAuth }: FigmaAuthOptions) {
     this.apiKey = figmaApiKey || "";
     this.oauthToken = figmaOAuthToken || "";
     this.useOAuth = !!useOAuth && !!this.oauthToken;
+    this.baseUrl = (process.env.MCP_SERVER_URL?.trim() || "https://api.figma.com/v1").replace(/\/+$/, "");
   }
 
   private getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    
     if (this.useOAuth) {
       Logger.log("Using OAuth Bearer token for authentication");
-      return { Authorization: `Bearer ${this.oauthToken}` };
+      return { Authorization: `Bearer ${this.customer_token || this.oauthToken}` };
     } else {
       Logger.log("Using Personal Access Token for authentication");
-      return { "X-Figma-Token": this.apiKey };
+      return { "X-Figma-Token": this.customer_token || this.apiKey };
     }
+        
+    return headers;
   }
 
   /**

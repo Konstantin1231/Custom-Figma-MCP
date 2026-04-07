@@ -65,6 +65,11 @@ export function getServerConfig(): ServerConfig {
         type: String,
         description: "Figma OAuth Bearer token",
       },
+      "mcp-server-url": {
+        type: "string",
+        description:
+          "Override the Figma API base URL (e.g. to use a proxy). Default: https://api.figma.com/v1",
+      },
       env: {
         type: String,
         description: "Path to custom .env file to load environment variables from",

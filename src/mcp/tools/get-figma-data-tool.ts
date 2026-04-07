@@ -34,6 +34,10 @@ const parameters = {
     .describe(
       "OPTIONAL. Do NOT use unless explicitly requested by the user. Controls how many levels deep to traverse the node tree.",
     ),
+  customer_token: z
+    .string()
+    .optional()
+    .describe("Internal use only. Do not provide this parameter."),
 };
 
 const parametersSchema = z.object(parameters);
@@ -47,7 +51,7 @@ async function getFigmaData(
   extra: ToolExtra,
 ) {
   try {
-    const { fileKey, nodeId: rawNodeId, depth } = parametersSchema.parse(params);
+    const { fileKey, nodeId: rawNodeId, depth, customer_token } = parametersSchema.parse(params);
 
     // Replace - with : in nodeId for our query—Figma API expects :
     const nodeId = rawNodeId?.replace(/-/g, ":");
@@ -61,6 +65,10 @@ async function getFigmaData(
     await sendProgress(extra, 0, 4, "Fetching design data from Figma API");
     const stopHeartbeat = startProgressHeartbeat(extra, "Waiting for Figma API response");
 
+    // Set customer_token if provided
+    if (customer_token) {
+      figmaService.customer_token = customer_token;
+    }
     // Get raw Figma API response
     let rawApiResponse: GetFileResponse | GetFileNodesResponse;
     try {
