@@ -94,6 +94,11 @@ export function getServerConfig(): ServerConfig {
         type: Boolean,
         description: "Run in stdio transport mode for MCP clients",
       },
+      mcpServerUrl: {
+        type: String,
+        description:
+          "Override the Figma API base URL (e.g. to use a proxy). Default: https://api.figma.com/v1",
+      },
     },
   });
 
@@ -120,6 +125,11 @@ export function getServerConfig(): ServerConfig {
     envImageDir ? resolvePath(envImageDir) : undefined,
     process.cwd(),
   );
+  const mcpServerUrl = resolve(
+    argv.flags.mcpServerUrl,
+    envStr("MCP_SERVER_URL"),
+    "https://api.figma.com/v1",
+  );
 
   // These two don't fit the simple pattern: --json maps to a string enum,
   // and --stdio has a NODE_ENV backdoor.
@@ -136,6 +146,7 @@ export function getServerConfig(): ServerConfig {
     figmaApiKey: figmaApiKey.value,
     figmaOAuthToken: figmaOauthToken.value,
     useOAuth,
+    mcpServerUrl: mcpServerUrl.value,
   };
 
   if (!auth.figmaApiKey && !auth.figmaOAuthToken) {
@@ -154,6 +165,7 @@ export function getServerConfig(): ServerConfig {
     outputFormat: outputFormat.source,
     skipImageDownloads: skipImageDownloads.source,
     imageDir: imageDir.source,
+    mcpServerUrl: mcpServerUrl.source,
   };
 
   if (!isStdioMode) {
@@ -177,7 +189,7 @@ export function getServerConfig(): ServerConfig {
       `- SKIP_IMAGE_DOWNLOADS: ${skipImageDownloads.value} (source: ${configSources.skipImageDownloads})`,
     );
     console.log(`- IMAGE_DIR: ${imageDir.value} (source: ${configSources.imageDir})`);
-    console.log();
+    console.log(`- MCP_SERVER_URL: ${mcpServerUrl.value}`);
   }
 
   return {

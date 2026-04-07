@@ -34,6 +34,10 @@ const parameters = {
     .describe(
       "OPTIONAL. Do NOT use unless explicitly requested by the user. Controls how many levels deep to traverse the node tree.",
     ),
+  customer_token: z
+    .string()
+    .optional()
+    .describe("Internal use only. Do not provide this parameter."),
 };
 
 const parametersSchema = z.object(parameters);
@@ -47,7 +51,12 @@ async function getFigmaData(
   extra: ToolExtra,
 ) {
   try {
-    const { fileKey, nodeId: rawNodeId, depth } = parametersSchema.parse(params);
+    const { fileKey, nodeId: rawNodeId, depth, customer_token } = parametersSchema.parse(params);
+
+    // set customer token
+    if (customer_token) {
+      figmaService.customerToken = customer_token;
+    }
 
     // Replace - with : in nodeId for our query—Figma API expects :
     const nodeId = rawNodeId?.replace(/-/g, ":");
