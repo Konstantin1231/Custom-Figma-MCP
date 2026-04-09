@@ -1,0 +1,26 @@
+{
+  "95d42fdb-0037-458d-8d97-5fd5756ad691": {
+    "id": "95d42fdb-0037-458d-8d97-5fd5756ad691",
+    "uploadToken": "1f3a960a-3c50-428c-a107-a0fb2424a23f",
+    "fileName": "95d42fdb-0037-458d-8d97-5fd5756ad691.svg",
+    "uploaded": true,
+    "createdAt": "2026-04-09T13:27:24.420Z",
+    "updatedAt": "2026-04-09T13:27:24.459Z",
+    "contentLength": 3003,
+    "contentType": "image/svg+xml",
+    "type": "TEMPORARY",
+    "sourceType": "PBX"
+  },
+  "d18beadd-b6a0-4a26-b3f1-9abbd23e5e12": {
+    "id": "d18beadd-b6a0-4a26-b3f1-9abbd23e5e12",
+    "uploadToken": "7f630373-e990-4c81-8789-0452ddf33016",
+    "fileName": "d18beadd-b6a0-4a26-b3f1-9abbd23e5e12.svg",
+    "uploaded": true,
+    "createdAt": "2026-04-09T14:43:54.148Z",
+    "updatedAt": "2026-04-09T14:43:54.166Z",
+    "contentLength": 3003,
+    "contentType": "image/svg+xml",
+    "type": "TEMPORARY",
+    "sourceType": "PBX"
+  }
+}
