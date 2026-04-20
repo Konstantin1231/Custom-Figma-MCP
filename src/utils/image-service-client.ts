@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { Logger } from "./logger.js";
 
 export type ImageServiceMimeType =
 	| "image/png"
@@ -50,6 +51,24 @@ const MIME_TYPE_BY_EXTENSION: Record<string, ImageServiceMimeType> = {
 
 function normalizeBaseUrl(baseURL: string): string {
 	return baseURL.replace(/\/+$/, "");
+}
+
+function describeUrl(rawUrl: string): string {
+	try {
+		const url = new URL(rawUrl);
+		return `${url.origin}${url.pathname}`;
+	} catch {
+		return rawUrl;
+	}
+}
+
+async function getResponseBodyPreview(response: Response): Promise<string> {
+	const responseText = await response.text();
+	if (!responseText) {
+		return "(empty body)";
+	}
+
+	return responseText.length > 500 ? `${responseText.slice(0, 500)}...` : responseText;
 }
 
 function getMimeTypeFromFilePath(filePath: string): ImageServiceMimeType {
@@ -122,7 +141,12 @@ export class ImageServiceClient {
 	}
 
 	async createImageEntry(request: CreateImageRequest): Promise<ImageResponse> {
-		const response = await fetch(`${this.baseURL}/images`, {
+		const createImageUrl = `${this.baseURL}/images`;
+		Logger.log(
+			`Creating temporary image entry at ${describeUrl(createImageUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
+		);
+
+		const response = await fetch(createImageUrl, {
 			method: "POST",
 			headers: {
 				...this.getAuthHeaders(),
@@ -133,14 +157,26 @@ export class ImageServiceClient {
 		});
 
 		if (!response.ok) {
+			const responseBody = await getResponseBodyPreview(response);
+			Logger.error(
+				`Image entry creation failed with ${response.status} ${response.statusText} at ${describeUrl(createImageUrl)}. Response body: ${responseBody}`,
+			);
 			throw new ImageServiceClientError("Failed to create image entry", response.status);
 		}
 
-		return parseImageResponse(await response.json());
+		const imageResponse = parseImageResponse(await response.json());
+		Logger.log(
+			`Created temporary image entry ${imageResponse.id}; upload target ${describeUrl(imageResponse.url)}`,
+		);
+		return imageResponse;
 	}
 
 	async uploadBinary(uploadUrl: string, filePath: string, request: CreateImageRequest): Promise<void> {
 		const fileBuffer = await fs.readFile(filePath);
+		Logger.log(
+			`Uploading ${path.basename(filePath)} to ${describeUrl(uploadUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
+		);
+
 		const response = await fetch(uploadUrl, {
 			method: "PUT",
 			headers: {
@@ -151,12 +187,21 @@ export class ImageServiceClient {
 		});
 
 		if (!response.ok) {
+			const responseBody = await getResponseBodyPreview(response);
+			Logger.error(
+				`Image upload failed with ${response.status} ${response.statusText} at ${describeUrl(uploadUrl)} for ${path.basename(filePath)}. Response body: ${responseBody}`,
+			);
 			throw new ImageServiceClientError("Failed to upload image", response.status);
 		}
+
+		Logger.log(`Image upload completed for ${path.basename(filePath)}`);
 	}
 
 	async getImageMetadata(id: string): Promise<ImageResponse> {
-		const response = await fetch(`${this.baseURL}/images/${id}`, {
+		const metadataUrl = `${this.baseURL}/images/${id}`;
+		Logger.log(`Fetching image metadata from ${describeUrl(metadataUrl)} for image ${id}`);
+
+		const response = await fetch(metadataUrl, {
 			method: "GET",
 			headers: {
 				...this.getAuthHeaders(),
@@ -165,14 +210,24 @@ export class ImageServiceClient {
 		});
 
 		if (!response.ok) {
+			const responseBody = await getResponseBodyPreview(response);
+			Logger.error(
+				`Image metadata fetch failed with ${response.status} ${response.statusText} at ${describeUrl(metadataUrl)} for image ${id}. Response body: ${responseBody}`,
+			);
 			throw new ImageServiceClientError("Failed to get image url", response.status);
 		}
 
-		return parseImageResponse(await response.json());
+		const imageResponse = parseImageResponse(await response.json());
+		Logger.log(`Fetched image metadata for ${id}; public URL ${describeUrl(imageResponse.url)}`);
+		return imageResponse;
 	}
 
 	async uploadTemporaryImage(filePath: string): Promise<ImageResponse> {
 		const request = await createRequestFromFile(filePath);
+		Logger.log(
+			`Preparing temporary image upload for ${path.basename(filePath)} from ${this.baseURL}`,
+		);
+
 		const createdImage = await this.createImageEntry(request);
 		await this.uploadBinary(createdImage.url, filePath, request);
 		return this.getImageMetadata(createdImage.id);
