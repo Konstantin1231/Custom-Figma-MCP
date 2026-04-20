@@ -53,13 +53,8 @@ function normalizeBaseUrl(baseURL: string): string {
 	return baseURL.replace(/\/+$/, "");
 }
 
-function describeUrl(rawUrl: string): string {
-	try {
-		const url = new URL(rawUrl);
-		return `${url.origin}${url.pathname}`;
-	} catch {
-		return rawUrl;
-	}
+function truncateUrl(rawUrl: string): string {
+	return rawUrl.length > 25 ? `${rawUrl.slice(0, 25)}...` : rawUrl;
 }
 
 async function getResponseBodyPreview(response: Response): Promise<string> {
@@ -143,7 +138,7 @@ export class ImageServiceClient {
 	async createImageEntry(request: CreateImageRequest): Promise<ImageResponse> {
 		const createImageUrl = `${this.baseURL}/images`;
 		Logger.log(
-			`Creating temporary image entry at ${describeUrl(createImageUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
+			`Creating temporary image entry at ${truncateUrl(createImageUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
 		);
 
 		const response = await fetch(createImageUrl, {
@@ -159,14 +154,14 @@ export class ImageServiceClient {
 		if (!response.ok) {
 			const responseBody = await getResponseBodyPreview(response);
 			Logger.error(
-				`Image entry creation failed with ${response.status} ${response.statusText} at ${describeUrl(createImageUrl)}. Response body: ${responseBody}`,
+				`Image entry creation failed with ${response.status} ${response.statusText} at ${truncateUrl(createImageUrl)}. Response body: ${responseBody}`,
 			);
 			throw new ImageServiceClientError("Failed to create image entry", response.status);
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
 		Logger.log(
-			`Created temporary image entry ${imageResponse.id}; upload target ${describeUrl(imageResponse.url)}`,
+			`Created temporary image entry ${imageResponse.id}; upload target ${truncateUrl(imageResponse.url)}`,
 		);
 		return imageResponse;
 	}
@@ -174,7 +169,7 @@ export class ImageServiceClient {
 	async uploadBinary(uploadUrl: string, filePath: string, request: CreateImageRequest): Promise<void> {
 		const fileBuffer = await fs.readFile(filePath);
 		Logger.log(
-			`Uploading ${path.basename(filePath)} to ${describeUrl(uploadUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
+			`Uploading ${path.basename(filePath)} to ${truncateUrl(uploadUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
 		);
 
 		const response = await fetch(uploadUrl, {
@@ -189,7 +184,7 @@ export class ImageServiceClient {
 		if (!response.ok) {
 			const responseBody = await getResponseBodyPreview(response);
 			Logger.error(
-				`Image upload failed with ${response.status} ${response.statusText} at ${describeUrl(uploadUrl)} for ${path.basename(filePath)}. Response body: ${responseBody}`,
+				`Image upload failed with ${response.status} ${response.statusText} at ${truncateUrl(uploadUrl)} for ${path.basename(filePath)}. Response body: ${responseBody}`,
 			);
 			throw new ImageServiceClientError("Failed to upload image", response.status);
 		}
@@ -199,7 +194,7 @@ export class ImageServiceClient {
 
 	async getImageMetadata(id: string): Promise<ImageResponse> {
 		const metadataUrl = `${this.baseURL}/images/${id}`;
-		Logger.log(`Fetching image metadata from ${describeUrl(metadataUrl)} for image ${id}`);
+		Logger.log(`Fetching image metadata from ${truncateUrl(metadataUrl)} for image ${id}`);
 
 		const response = await fetch(metadataUrl, {
 			method: "GET",
@@ -212,13 +207,13 @@ export class ImageServiceClient {
 		if (!response.ok) {
 			const responseBody = await getResponseBodyPreview(response);
 			Logger.error(
-				`Image metadata fetch failed with ${response.status} ${response.statusText} at ${describeUrl(metadataUrl)} for image ${id}. Response body: ${responseBody}`,
+				`Image metadata fetch failed with ${response.status} ${response.statusText} at ${truncateUrl(metadataUrl)} for image ${id}. Response body: ${responseBody}`,
 			);
 			throw new ImageServiceClientError("Failed to get image url", response.status);
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
-		Logger.log(`Fetched image metadata for ${id}; public URL ${describeUrl(imageResponse.url)}`);
+		Logger.log(`Fetched image metadata for ${id}; public URL ${truncateUrl(imageResponse.url)}`);
 		return imageResponse;
 	}
 
