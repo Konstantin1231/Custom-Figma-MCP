@@ -160,6 +160,7 @@ export class ImageServiceClient {
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
+		Logger.log(`Image entry response: ${JSON.stringify(imageResponse)}`);
 		Logger.log(
 			`Created temporary image entry ${imageResponse.id}; upload target ${truncateUrl(imageResponse.url)}`,
 		);
