@@ -34,11 +34,15 @@ export class ImageServiceClientError extends Error {
 	constructor(
 		message: string,
 		public readonly statusCode: number,
+		public readonly responseBody?: string,
 	) {
 		super(message);
 		this.name = "ImageServiceClientError";
 	}
 }
+
+const IMAGE_METADATA_RETRY_DELAYS_MS = [250, 500, 1000, 2000, 4000];
+const IMAGE_NOT_VERIFIED_MESSAGE = "Image is not verified";
 
 const MIME_TYPE_BY_EXTENSION: Record<string, ImageServiceMimeType> = {
 	".png": "image/png",
@@ -64,6 +68,19 @@ async function getResponseBodyPreview(response: Response): Promise<string> {
 	}
 
 	return responseText.length > 500 ? `${responseText.slice(0, 500)}...` : responseText;
+}
+
+function wait(delayMs: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function isImageVerificationPending(error: unknown): error is ImageServiceClientError {
+	return (
+		error instanceof ImageServiceClientError &&
+		error.statusCode === 409 &&
+		!!error.responseBody &&
+		error.responseBody.includes(IMAGE_NOT_VERIFIED_MESSAGE)
+	);
 }
 
 function getMimeTypeFromFilePath(filePath: string): ImageServiceMimeType {
@@ -156,7 +173,11 @@ export class ImageServiceClient {
 			Logger.error(
 				`Image entry creation failed with ${response.status} ${response.statusText} at ${truncateUrl(createImageUrl)}. Response body: ${responseBody}`,
 			);
-			throw new ImageServiceClientError("Failed to create image entry", response.status);
+			throw new ImageServiceClientError(
+				"Failed to create image entry",
+				response.status,
+				responseBody,
+			);
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
@@ -187,7 +208,11 @@ export class ImageServiceClient {
 			Logger.error(
 				`Image upload failed with ${response.status} ${response.statusText} at ${truncateUrl(uploadUrl)} for ${path.basename(filePath)}. Response body: ${responseBody}`,
 			);
-			throw new ImageServiceClientError("Failed to upload image", response.status);
+			throw new ImageServiceClientError(
+				"Failed to upload image",
+				response.status,
+				responseBody,
+			);
 		}
 
 		Logger.log(`Image upload completed for ${path.basename(filePath)}`);
@@ -210,12 +235,34 @@ export class ImageServiceClient {
 			Logger.error(
 				`Image metadata fetch failed with ${response.status} ${response.statusText} at ${truncateUrl(metadataUrl)} for image ${id}. Response body: ${responseBody}`,
 			);
-			throw new ImageServiceClientError("Failed to get image url", response.status);
+			throw new ImageServiceClientError(
+				"Failed to get image url",
+				response.status,
+				responseBody,
+			);
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
 		Logger.log(`Fetched image metadata for ${id}; public URL ${truncateUrl(imageResponse.url)}`);
 		return imageResponse;
+	}
+
+	private async waitForVerifiedImageMetadata(id: string): Promise<ImageResponse> {
+		for (let attempt = 0; ; attempt++) {
+			try {
+				return await this.getImageMetadata(id);
+			} catch (error) {
+				if (!isImageVerificationPending(error) || attempt >= IMAGE_METADATA_RETRY_DELAYS_MS.length) {
+					throw error;
+				}
+
+				const retryDelayMs = IMAGE_METADATA_RETRY_DELAYS_MS[attempt];
+				Logger.log(
+					`Image ${id} is not verified yet; retrying metadata fetch in ${retryDelayMs}ms (${attempt + 1}/${IMAGE_METADATA_RETRY_DELAYS_MS.length})`,
+				);
+				await wait(retryDelayMs);
+			}
+		}
 	}
 
 	async uploadTemporaryImage(filePath: string): Promise<ImageResponse> {
@@ -226,6 +273,6 @@ export class ImageServiceClient {
 
 		const createdImage = await this.createImageEntry(request);
 		await this.uploadBinary(createdImage.url, filePath, request);
-		return this.getImageMetadata(createdImage.id);
+		return this.waitForVerifiedImageMetadata(createdImage.id);
 	}
 }
