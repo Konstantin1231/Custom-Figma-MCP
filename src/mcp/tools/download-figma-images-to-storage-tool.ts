@@ -6,14 +6,8 @@ import type { Transform } from "@figma/rest-api-spec";
 import { z } from "zod";
 import { FigmaService } from "../../services/figma.js";
 import { Logger } from "../../utils/logger.js";
-import {
-	downloadAndProcessImage,
-	type ImageProcessingResult,
-} from "../../utils/image-processing.js";
-import {
-	ImageServiceClient,
-	ImageServiceClientError,
-} from "../../utils/image-service-client.js";
+import { downloadAndProcessImage, type ImageProcessingResult } from "../../utils/image-processing.js";
+import { ImageServiceClient } from "../../utils/image-service-client.js";
 import { sendProgress, startProgressHeartbeat, type ToolExtra } from "../progress.js";
 
 const parameters = {
@@ -94,7 +88,7 @@ const parametersSchema = z.object(parameters);
 export type DownloadImagesParams = z.infer<typeof parametersSchema>;
 
 type PlannedDownload = {
-	fileName: string;
+	assetName: string;
 	needsCropping: boolean;
 	cropTransform: Transform | null;
 	requiresImageDimensions: boolean;
@@ -105,7 +99,7 @@ type PlannedDownload = {
 
 type RequestedNode = {
 	requestedNodeId: string;
-	resolvedFileName: string;
+	resolvedAssetName: string;
 	downloadIndex: number;
 };
 
@@ -114,45 +108,6 @@ type UploadedImageResult = ImageProcessingResult & {
 	publicUrl: string;
 };
 
-function resolveFileName(assetName: string, variantSuffix?: string | null): string {
-	if (!variantSuffix || assetName.includes(variantSuffix)) {
-		return assetName;
-	}
-
-	const extension = path.extname(assetName);
-	const fileNameWithoutExtension = assetName.slice(0, -extension.length);
-	return `${fileNameWithoutExtension}-${variantSuffix}${extension}`;
-}
-
-function describeDownloadSource(item: PlannedDownload): string {
-	if (item.gifRef) {
-		return `gifRef ${item.gifRef}`;
-	}
-
-	if (item.imageRef) {
-		return `imageRef ${item.imageRef}`;
-	}
-
-	if (item.nodeId) {
-		return `node ${item.nodeId}`;
-	}
-
-	return "unknown source";
-}
-
-function formatUploadError(error: unknown): string {
-	if (error instanceof ImageServiceClientError) {
-		const responseDetails = error.responseBody ? `: ${error.responseBody}` : "";
-		return `${error.message} (status ${error.statusCode})${responseDetails}`;
-	}
-
-	if (error instanceof Error) {
-		return error.message;
-	}
-
-	return String(error);
-}
-
 async function downloadAndUploadImages(
 	figmaService: FigmaService,
 	imageServiceClient: ImageServiceClient,
@@ -160,9 +115,7 @@ async function downloadAndUploadImages(
 	items: PlannedDownload[],
 	options: { pngScale?: number } = {},
 ): Promise<UploadedImageResult[]> {
-	if (items.length === 0) {
-		return [];
-	}
+	if (items.length === 0) return [];
 
 	const workDirectory = path.join(os.tmpdir(), "figma-mcp-image-service-work");
 	const workDirectoryPrefix = randomUUID().replace(/-/g, "").slice(0, 6);
@@ -175,16 +128,16 @@ async function downloadAndUploadImages(
 	const imageFillUrls = imageFillRefs.length > 0 ? await figmaService.getImageFillUrls(fileKey) : {};
 
 	const pngRenderNodeIds = items
-		.filter((item) => item.nodeId && !item.fileName.toLowerCase().endsWith(".svg"))
-		.map((item) => item.nodeId as string);
+		.filter((item) => item.nodeId && !item.assetName.toLowerCase().endsWith(".svg"))
+		.map((item) => item.nodeId!) as string[];
 	const pngRenderUrls =
 		pngRenderNodeIds.length > 0
 			? await figmaService.getNodeRenderUrls(fileKey, pngRenderNodeIds, "png", { pngScale })
 			: {};
 
 	const svgRenderNodeIds = items
-		.filter((item) => item.nodeId && item.fileName.toLowerCase().endsWith(".svg"))
-		.map((item) => item.nodeId as string);
+		.filter((item) => item.nodeId && item.assetName.toLowerCase().endsWith(".svg"))
+		.map((item) => item.nodeId!) as string[];
 	const svgRenderUrls =
 		svgRenderNodeIds.length > 0
 			? await figmaService.getNodeRenderUrls(fileKey, svgRenderNodeIds, "svg")
@@ -192,27 +145,24 @@ async function downloadAndUploadImages(
 
 	return Promise.all(
 		items.map(async (item, index) => {
-			const sourceDescription = describeDownloadSource(item);
-			const workFileName = `${workDirectoryPrefix}-${index}-${item.fileName}`;
+			const imageUrl = item.gifRef
+				? imageFillUrls[item.gifRef]
+				: item.imageRef
+					? imageFillUrls[item.imageRef]
+					: item.nodeId && item.assetName.toLowerCase().endsWith(".svg")
+						? svgRenderUrls[item.nodeId]
+						: item.nodeId
+							? pngRenderUrls[item.nodeId]
+							: undefined;
+
+			if (!imageUrl) {
+				throw new Error(`Failed to resolve a Figma image URL for ${item.assetName}.`);
+			}
+
+			const workFileName = `${workDirectoryPrefix}-${index}-${item.assetName}`;
 			const workFilePath = path.join(workDirectory, workFileName);
 
-			Logger.log(`Starting image download for ${item.fileName} from ${sourceDescription}`);
-
 			try {
-				const imageUrl = item.gifRef
-					? imageFillUrls[item.gifRef]
-					: item.imageRef
-						? imageFillUrls[item.imageRef]
-						: item.nodeId && item.fileName.toLowerCase().endsWith(".svg")
-							? svgRenderUrls[item.nodeId]
-							: item.nodeId
-								? pngRenderUrls[item.nodeId]
-								: undefined;
-
-				if (!imageUrl) {
-					throw new Error(`Failed to resolve a Figma image URL for ${sourceDescription}.`);
-				}
-
 				const processedImage = await downloadAndProcessImage(
 					workFileName,
 					workDirectory,
@@ -221,34 +171,17 @@ async function downloadAndUploadImages(
 					item.cropTransform ?? undefined,
 					item.requiresImageDimensions,
 				);
+				const uploadedImage = await imageServiceClient.uploadTemporaryImage(processedImage.filePath);
 
-				try {
-					const uploadedImage = await imageServiceClient.uploadTemporaryImage(processedImage.filePath);
-
-					Logger.log(
-						`Finished image upload for ${item.fileName} from ${sourceDescription}; image ${uploadedImage.id}`,
-					);
-
-					return {
-						...processedImage,
-						imageId: uploadedImage.id,
-						publicUrl: uploadedImage.url,
-					} satisfies UploadedImageResult;
-				} finally {
-					await fs.rm(workFilePath, { force: true });
-				}
-			} catch (error) {
-				const errorMessage = formatUploadError(error);
-				Logger.error(
-					`Image download/upload failed for ${item.fileName} from ${sourceDescription}: ${errorMessage}`,
-					error,
-				);
-				throw new Error(
-					`Image download/upload failed for ${item.fileName} from ${sourceDescription}: ${errorMessage}`,
-					{ cause: error instanceof Error ? error : undefined },
-				);
+				return {
+					...processedImage,
+					imageId: uploadedImage.id,
+					publicUrl: uploadedImage.url,
+				} satisfies UploadedImageResult;
+			} finally {
+				await fs.rm(workFilePath, { force: true });
 			}
-			}),
+		}),
 	);
 }
 
@@ -277,34 +210,45 @@ async function downloadFigmaImages(
 		const seenDownloads = new Map<string, number>();
 
 		for (const rawNode of nodes) {
-			const normalizedNodeId = rawNode.nodeId.replace(/-/g, ":");
-			const resolvedFileName = resolveFileName(rawNode.assetName, rawNode.variantSuffix);
+			const { nodeId: rawNodeId, ...node } = rawNode;
+			const normalizedNodeId = rawNodeId.replace(/-/g, ":");
+
+			let resolvedAssetName = node.assetName;
+			if (node.variantSuffix && !resolvedAssetName.includes(node.variantSuffix)) {
+				const extension = resolvedAssetName.split(".").pop();
+				const assetNameWithoutExtension = resolvedAssetName.substring(
+					0,
+					resolvedAssetName.lastIndexOf("."),
+				);
+				resolvedAssetName = `${assetNameWithoutExtension}-${node.variantSuffix}.${extension}`;
+			}
+
 			const plannedDownload: PlannedDownload = {
-				fileName: resolvedFileName,
-				needsCropping: rawNode.needsCropping || false,
-				cropTransform: rawNode.cropTransform,
-				requiresImageDimensions: rawNode.requiresImageDimensions || false,
+				assetName: resolvedAssetName,
+				needsCropping: node.needsCropping || false,
+				cropTransform: node.cropTransform,
+				requiresImageDimensions: node.requiresImageDimensions || false,
 			};
 
-			if (rawNode.gifRef) {
+			if (node.gifRef) {
 				const downloadIndex = downloadItems.length;
-				downloadItems.push({ ...plannedDownload, gifRef: rawNode.gifRef });
+				downloadItems.push({ ...plannedDownload, gifRef: node.gifRef });
 				requestedNodes.push({
-					requestedNodeId: rawNode.nodeId,
-					resolvedFileName,
+					requestedNodeId: rawNodeId,
+					resolvedAssetName,
 					downloadIndex,
 				});
 				continue;
 			}
 
-			if (rawNode.imageRef) {
-				const uniqueKey = `${rawNode.imageRef}-${rawNode.variantSuffix || "none"}`;
+			if (node.imageRef) {
+				const uniqueKey = `${node.imageRef}-${node.variantSuffix || "none"}`;
 
-				if (!rawNode.variantSuffix && seenDownloads.has(uniqueKey)) {
-					const downloadIndex = seenDownloads.get(uniqueKey) as number;
+				if (!node.variantSuffix && seenDownloads.has(uniqueKey)) {
+					const downloadIndex = seenDownloads.get(uniqueKey)!;
 					requestedNodes.push({
-						requestedNodeId: rawNode.nodeId,
-						resolvedFileName,
+						requestedNodeId: rawNodeId,
+						resolvedAssetName,
 						downloadIndex,
 					});
 
@@ -316,10 +260,10 @@ async function downloadFigmaImages(
 				}
 
 				const downloadIndex = downloadItems.length;
-				downloadItems.push({ ...plannedDownload, imageRef: rawNode.imageRef });
+				downloadItems.push({ ...plannedDownload, imageRef: node.imageRef });
 				requestedNodes.push({
-					requestedNodeId: rawNode.nodeId,
-					resolvedFileName,
+					requestedNodeId: rawNodeId,
+					resolvedAssetName,
 					downloadIndex,
 				});
 				seenDownloads.set(uniqueKey, downloadIndex);
@@ -329,8 +273,8 @@ async function downloadFigmaImages(
 			const downloadIndex = downloadItems.length;
 			downloadItems.push({ ...plannedDownload, nodeId: normalizedNodeId });
 			requestedNodes.push({
-				requestedNodeId: rawNode.nodeId,
-				resolvedFileName,
+				requestedNodeId: rawNodeId,
+				resolvedAssetName,
 				downloadIndex,
 			});
 		}
@@ -340,18 +284,14 @@ async function downloadFigmaImages(
 
 		let uploadedImages: UploadedImageResult[];
 		try {
-			uploadedImages = await downloadAndUploadImages(
-				figmaService,
-				imageServiceClient,
-				fileKey,
-				downloadItems,
-				{ pngScale },
-			);
+			uploadedImages = await downloadAndUploadImages(figmaService, imageServiceClient, fileKey, downloadItems, {
+				pngScale,
+			});
 		} finally {
 			stopHeartbeat();
 		}
 
-		const successCount = uploadedImages.length;
+		const successCount = uploadedImages.filter(Boolean).length;
 		await sendProgress(extra, 2, 3, `Uploaded ${successCount} images, formatting response`);
 
 		const imageMappings = requestedNodes
@@ -363,7 +303,7 @@ async function downloadFigmaImages(
 					? `${dimensions} | ${uploadedImage.cssVariables}`
 					: dimensions;
 
-				return `- ${requestedNode.resolvedFileName} (${requestedNode.requestedNodeId}) -> ${uploadedImage.publicUrl} [${dimensionInfo}${cropStatus}]`;
+				return `- ${requestedNode.resolvedAssetName} (${requestedNode.requestedNodeId}) -> ${uploadedImage.publicUrl} [${dimensionInfo}${cropStatus}]`;
 			})
 			.join("\n");
 
@@ -376,14 +316,13 @@ async function downloadFigmaImages(
 			],
 		};
 	} catch (error) {
-		const message = formatUploadError(error);
 		Logger.error(`Error downloading images from ${params.fileKey}:`, error);
 		return {
 			isError: true,
 			content: [
 				{
 					type: "text" as const,
-					text: `Failed to download images: ${message}`,
+					text: `Failed to download images: ${error instanceof Error ? error.message : String(error)}`,
 				},
 			],
 		};
