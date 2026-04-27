@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import { randomUUID } from "crypto";
 import os from "os";
 import path from "path";
 import type { Transform } from "@figma/rest-api-spec";
@@ -9,7 +10,10 @@ import {
 	downloadAndProcessImage,
 	type ImageProcessingResult,
 } from "../../utils/image-processing.js";
-import { ImageServiceClient } from "../../utils/image-service-client.js";
+import {
+	ImageServiceClient,
+	ImageServiceClientError,
+} from "../../utils/image-service-client.js";
 import { sendProgress, startProgressHeartbeat, type ToolExtra } from "../progress.js";
 
 const parameters = {
@@ -120,6 +124,35 @@ function resolveFileName(assetName: string, variantSuffix?: string | null): stri
 	return `${fileNameWithoutExtension}-${variantSuffix}${extension}`;
 }
 
+function describeDownloadSource(item: PlannedDownload): string {
+	if (item.gifRef) {
+		return `gifRef ${item.gifRef}`;
+	}
+
+	if (item.imageRef) {
+		return `imageRef ${item.imageRef}`;
+	}
+
+	if (item.nodeId) {
+		return `node ${item.nodeId}`;
+	}
+
+	return "unknown source";
+}
+
+function formatUploadError(error: unknown): string {
+	if (error instanceof ImageServiceClientError) {
+		const responseDetails = error.responseBody ? `: ${error.responseBody}` : "";
+		return `${error.message} (status ${error.statusCode})${responseDetails}`;
+	}
+
+	if (error instanceof Error) {
+		return error.message;
+	}
+
+	return String(error);
+}
+
 async function downloadAndUploadImages(
 	figmaService: FigmaService,
 	imageServiceClient: ImageServiceClient,
@@ -131,33 +164,41 @@ async function downloadAndUploadImages(
 		return [];
 	}
 
-	const workDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "figma-mcp-image-service-"));
+	const workDirectory = path.join(os.tmpdir(), "figma-mcp-image-service-work");
+	const workDirectoryPrefix = randomUUID().replace(/-/g, "").slice(0, 6);
+	await fs.mkdir(workDirectory, { recursive: true });
 
-	try {
-		const { pngScale = 2 } = options;
-		const imageFillRefs = items
-			.map((item) => item.gifRef ?? item.imageRef)
-			.filter((value): value is string => !!value);
-		const imageFillUrls = imageFillRefs.length > 0 ? await figmaService.getImageFillUrls(fileKey) : {};
+	const { pngScale = 2 } = options;
+	const imageFillRefs = items
+		.map((item) => item.gifRef ?? item.imageRef)
+		.filter((value): value is string => !!value);
+	const imageFillUrls = imageFillRefs.length > 0 ? await figmaService.getImageFillUrls(fileKey) : {};
 
-		const pngRenderNodeIds = items
-			.filter((item) => item.nodeId && !item.fileName.toLowerCase().endsWith(".svg"))
-			.map((item) => item.nodeId as string);
-		const pngRenderUrls =
-			pngRenderNodeIds.length > 0
-				? await figmaService.getNodeRenderUrls(fileKey, pngRenderNodeIds, "png", { pngScale })
-				: {};
+	const pngRenderNodeIds = items
+		.filter((item) => item.nodeId && !item.fileName.toLowerCase().endsWith(".svg"))
+		.map((item) => item.nodeId as string);
+	const pngRenderUrls =
+		pngRenderNodeIds.length > 0
+			? await figmaService.getNodeRenderUrls(fileKey, pngRenderNodeIds, "png", { pngScale })
+			: {};
 
-		const svgRenderNodeIds = items
-			.filter((item) => item.nodeId && item.fileName.toLowerCase().endsWith(".svg"))
-			.map((item) => item.nodeId as string);
-		const svgRenderUrls =
-			svgRenderNodeIds.length > 0
-				? await figmaService.getNodeRenderUrls(fileKey, svgRenderNodeIds, "svg")
-				: {};
+	const svgRenderNodeIds = items
+		.filter((item) => item.nodeId && item.fileName.toLowerCase().endsWith(".svg"))
+		.map((item) => item.nodeId as string);
+	const svgRenderUrls =
+		svgRenderNodeIds.length > 0
+			? await figmaService.getNodeRenderUrls(fileKey, svgRenderNodeIds, "svg")
+			: {};
 
-		return Promise.all(
-			items.map(async (item) => {
+	return Promise.all(
+		items.map(async (item, index) => {
+			const sourceDescription = describeDownloadSource(item);
+			const workFileName = `${workDirectoryPrefix}-${index}-${item.fileName}`;
+			const workFilePath = path.join(workDirectory, workFileName);
+
+			Logger.log(`Starting image download for ${item.fileName} from ${sourceDescription}`);
+
+			try {
 				const imageUrl = item.gifRef
 					? imageFillUrls[item.gifRef]
 					: item.imageRef
@@ -169,11 +210,11 @@ async function downloadAndUploadImages(
 								: undefined;
 
 				if (!imageUrl) {
-					throw new Error(`Failed to resolve a Figma image URL for ${item.fileName}.`);
+					throw new Error(`Failed to resolve a Figma image URL for ${sourceDescription}.`);
 				}
 
 				const processedImage = await downloadAndProcessImage(
-					item.fileName,
+					workFileName,
 					workDirectory,
 					imageUrl,
 					item.needsCropping,
@@ -184,19 +225,31 @@ async function downloadAndUploadImages(
 				try {
 					const uploadedImage = await imageServiceClient.uploadTemporaryImage(processedImage.filePath);
 
+					Logger.log(
+						`Finished image upload for ${item.fileName} from ${sourceDescription}; image ${uploadedImage.id}`,
+					);
+
 					return {
 						...processedImage,
 						imageId: uploadedImage.id,
 						publicUrl: uploadedImage.url,
 					} satisfies UploadedImageResult;
 				} finally {
-					await fs.rm(processedImage.filePath, { force: true });
+					await fs.rm(workFilePath, { force: true });
 				}
+			} catch (error) {
+				const errorMessage = formatUploadError(error);
+				Logger.error(
+					`Image download/upload failed for ${item.fileName} from ${sourceDescription}: ${errorMessage}`,
+					error,
+				);
+				throw new Error(
+					`Image download/upload failed for ${item.fileName} from ${sourceDescription}: ${errorMessage}`,
+					{ cause: error instanceof Error ? error : undefined },
+				);
+			}
 			}),
-		);
-	} finally {
-		await fs.rm(workDirectory, { recursive: true, force: true });
-	}
+	);
 }
 
 async function downloadFigmaImages(
@@ -323,7 +376,7 @@ async function downloadFigmaImages(
 			],
 		};
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		const message = formatUploadError(error);
 		Logger.error(`Error downloading images from ${params.fileKey}:`, error);
 		return {
 			isError: true,
