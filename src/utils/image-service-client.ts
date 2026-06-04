@@ -125,7 +125,7 @@ async function createRequestFromFile(filePath: string): Promise<CreateImageReque
 	return {
 		contentLength: fileStats.size,
 		contentType: getMimeTypeFromFilePath(filePath),
-		type: "TEMPORARY",
+		type: "REGULAR",
 		sourceType: "PBX",
 	};
 }
@@ -155,7 +155,7 @@ export class ImageServiceClient {
 	async createImageEntry(request: CreateImageRequest): Promise<ImageResponse> {
 		const createImageUrl = `${this.baseURL}/images`;
 		Logger.log(
-			`Creating temporary image entry at ${truncateUrl(createImageUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
+			`Creating image entry at ${truncateUrl(createImageUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
 		);
 
 		const response = await fetch(createImageUrl, {
@@ -183,7 +183,7 @@ export class ImageServiceClient {
 		const imageResponse = parseImageResponse(await response.json());
 		Logger.log(`Image entry response: ${JSON.stringify(imageResponse)}`);
 		Logger.log(
-			`Created temporary image entry ${imageResponse.id}; upload target ${truncateUrl(imageResponse.url)}`,
+			`Created image entry ${imageResponse.id}; upload target ${truncateUrl(imageResponse.url)}`,
 		);
 		return imageResponse;
 	}
@@ -268,7 +268,7 @@ export class ImageServiceClient {
 	async uploadTemporaryImage(filePath: string): Promise<ImageResponse> {
 		const request = await createRequestFromFile(filePath);
 		Logger.log(
-			`Preparing temporary image upload for ${path.basename(filePath)} from ${this.baseURL}`,
+			`Preparing image upload for ${path.basename(filePath)} from ${this.baseURL}`,
 		);
 
 		const createdImage = await this.createImageEntry(request);
