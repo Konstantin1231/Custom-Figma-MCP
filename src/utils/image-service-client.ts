@@ -154,9 +154,6 @@ export class ImageServiceClient {
 
 	async createImageEntry(request: CreateImageRequest): Promise<ImageResponse> {
 		const createImageUrl = `${this.baseURL}/images`;
-		Logger.log(
-			`Creating image entry at ${truncateUrl(createImageUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
-		);
 
 		const response = await fetch(createImageUrl, {
 			method: "POST",
@@ -171,7 +168,7 @@ export class ImageServiceClient {
 		if (!response.ok) {
 			const responseBody = await getResponseBodyPreview(response);
 			Logger.error(
-				`Image entry creation failed with ${response.status} ${response.statusText} at ${truncateUrl(createImageUrl)}. Response body: ${responseBody}`,
+				`[Phase 1] Image entry creation failed with ${response.status} ${response.statusText} at ${truncateUrl(createImageUrl)}. Response body: ${responseBody}`,
 			);
 			throw new ImageServiceClientError(
 				"Failed to create image entry",
@@ -181,18 +178,11 @@ export class ImageServiceClient {
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
-		Logger.log(`Image entry response: ${JSON.stringify(imageResponse)}`);
-		Logger.log(
-			`Created image entry ${imageResponse.id}; upload target ${truncateUrl(imageResponse.url)}`,
-		);
 		return imageResponse;
 	}
 
 	async uploadBinary(uploadUrl: string, filePath: string, request: CreateImageRequest): Promise<void> {
 		const fileBuffer = await fs.readFile(filePath);
-		Logger.log(
-			`Uploading ${path.basename(filePath)} to ${truncateUrl(uploadUrl)} (type=${request.contentType}, bytes=${request.contentLength})`,
-		);
 
 		const response = await fetch(uploadUrl, {
 			method: "PUT",
@@ -206,7 +196,7 @@ export class ImageServiceClient {
 		if (!response.ok) {
 			const responseBody = await getResponseBodyPreview(response);
 			Logger.error(
-				`Image upload failed with ${response.status} ${response.statusText} at ${truncateUrl(uploadUrl)} for ${path.basename(filePath)}. Response body: ${responseBody}`,
+				`[Phase 2] Image upload failed with ${response.status} ${response.statusText} at ${truncateUrl(uploadUrl)} for ${path.basename(filePath)}. Response body: ${responseBody}`,
 			);
 			throw new ImageServiceClientError(
 				"Failed to upload image",
@@ -214,13 +204,10 @@ export class ImageServiceClient {
 				responseBody,
 			);
 		}
-
-		Logger.log(`Image upload completed for ${path.basename(filePath)}`);
 	}
 
 	async getImageMetadata(id: string): Promise<ImageResponse> {
 		const metadataUrl = `${this.baseURL}/images/${id}`;
-		Logger.log(`Fetching image metadata from ${truncateUrl(metadataUrl)} for image ${id}`);
 
 		const response = await fetch(metadataUrl, {
 			method: "GET",
@@ -233,7 +220,7 @@ export class ImageServiceClient {
 		if (!response.ok) {
 			const responseBody = await getResponseBodyPreview(response);
 			Logger.error(
-				`Image metadata fetch failed with ${response.status} ${response.statusText} at ${truncateUrl(metadataUrl)} for image ${id}. Response body: ${responseBody}`,
+				`[Phase 3] Image metadata fetch failed with ${response.status} ${response.statusText} at ${truncateUrl(metadataUrl)} for image ${id}. Response body: ${responseBody}`,
 			);
 			throw new ImageServiceClientError(
 				"Failed to get image url",
@@ -243,7 +230,6 @@ export class ImageServiceClient {
 		}
 
 		const imageResponse = parseImageResponse(await response.json());
-		Logger.log(`Fetched image metadata for ${id}; public URL ${truncateUrl(imageResponse.url)}`);
 		return imageResponse;
 	}
 

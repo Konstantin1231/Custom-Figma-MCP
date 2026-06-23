@@ -5,13 +5,13 @@ export const Logger = {
   isHTTP: false,
   log: (...args: any[]) => {
     if (Logger.isHTTP) {
-      console.log("[INFO]", ...args);
+      console.log("[FIGMA-INFO]", ...args);
     } else {
-      console.error("[INFO]", ...args);
+      console.error("[FIGMA-INFO]", ...args);
     }
   },
   error: (...args: any[]) => {
-    console.error("[ERROR]", ...args);
+    console.error("[FIGMA-ERROR]", ...args);
   },
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
