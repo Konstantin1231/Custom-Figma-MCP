@@ -29,13 +29,13 @@ const parameters = {
         .describe("The ID of the Figma image node to fetch, formatted as 1234:5678"),
       imageRef: z
         .string()
-        .optional()
+        .nullable()
         .describe(
           "If a node has an imageRef fill, you must include this variable. Leave blank when downloading Vector SVG images or animated GIFs (use gifRef instead), or when an IMAGE fill is present without an imageRef — in that case the node is rendered as PNG via nodeId.",
         ),
       gifRef: z
         .string()
-        .optional()
+        .nullable()
         .describe(
           "If a node has a gifRef fill (animated GIF), you must include this variable to download the animated GIF. When gifRef is present in the Figma data, use it instead of imageRef to get the animated file rather than a static snapshot.",
         ),
@@ -50,15 +50,15 @@ const parameters = {
         ),
       needsCropping: z
         .boolean()
-        .optional()
+        .nullable()
         .describe("Whether this image needs cropping based on its transform matrix"),
       cropTransform: z
         .array(z.array(z.number()))
-        .optional()
+        .nullable()
         .describe("Figma transform matrix for image cropping"),
       requiresImageDimensions: z
         .boolean()
-        .optional()
+        .nullable()
         .describe("Whether this image requires dimension information for CSS variables"),
       filenameSuffix: z
         .string()
@@ -66,7 +66,7 @@ const parameters = {
           /^[a-zA-Z0-9_-]+$/,
           "Suffix must contain only letters, numbers, underscores, or hyphens",
         )
-        .optional()
+        .nullable()
         .describe(
           "Suffix to add to filename for unique cropped images, provided in the Figma data (e.g., 'abc123')",
         ),
@@ -86,6 +86,10 @@ const parameters = {
     .describe(
       "The directory to save images in. Provide a path relative to the server's image directory (e.g., 'public/images' or 'assets/icons'). Either separator works. Absolute paths are accepted only if they point inside the image directory. The directory is created if missing.",
     ),
+  customer_token: z
+    .string()
+    .optional()
+    .describe("Internal use only. Do not provide this parameter."),
 };
 
 const parametersSchema = z.object(parameters);
@@ -101,7 +105,18 @@ async function downloadFigmaImages(
   extra: ToolExtra,
 ) {
   try {
-    const { fileKey, nodes, localPath, pngScale } = parametersSchema.parse(params);
+    const {
+      fileKey,
+      nodes,
+      localPath,
+      pngScale = 2,
+      customer_token,
+    } = parametersSchema.parse(params);
+
+    // Set customer token if provided
+    if (customer_token) {
+      figmaService.customerToken = customer_token;
+    }
 
     // Resolve localPath against the configured image directory. The resolver
     // accepts relative paths and absolute paths that fall under imageDir; it

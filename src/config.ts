@@ -97,12 +97,14 @@ export function resolveAuth(flags: {
 }): FigmaAuthOptions {
   const figmaApiKey = resolve(flags.figmaApiKey, envStr("FIGMA_API_KEY"), "");
   const figmaOauthToken = resolve(flags.figmaOauthToken, envStr("FIGMA_OAUTH_TOKEN"), "");
+  const mcpServerUrl = resolve<string | undefined>(undefined, envStr("MCP_SERVER_URL"), undefined);
 
   const useOAuth = Boolean(figmaOauthToken.value);
   const auth: FigmaAuthOptions = {
     figmaApiKey: figmaApiKey.value,
     figmaOAuthToken: figmaOauthToken.value,
     useOAuth,
+    mcpServerUrl: mcpServerUrl.value,
   };
 
   return auth;
@@ -187,6 +189,7 @@ export function getServerConfig(flags: ServerFlags): ServerConfig {
     envFile: envFileSource,
     figmaApiKey: figmaApiKey.source,
     figmaOauthToken: figmaOauthToken.source,
+    mcpServerUrl: auth.mcpServerUrl ? "env" : "default",
     port: port.source,
     host: host.source,
     proxy: proxy.source,
@@ -212,6 +215,7 @@ export function getServerConfig(flags: ServerFlags): ServerConfig {
     } else {
       console.log("- Authentication Method: Per-request X-Figma-Token header");
     }
+    console.log(`- MCP_SERVER_URL: ${auth.mcpServerUrl} (source: ${configSources.mcpServerUrl})`);
     console.log(`- FRAMELINK_PORT: ${port.value} (source: ${configSources.port})`);
     console.log(`- FRAMELINK_HOST: ${host.value} (source: ${configSources.host})`);
     console.log(`- PROXY: ${proxy.value ? "configured" : "none"} (source: ${configSources.proxy})`);
