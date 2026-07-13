@@ -61,7 +61,7 @@ const parameters = {
     .optional()
     .default(1)
     .describe(
-      "Export scale used when Figma renders a node directly (no imageRef/gifRef). Optional, defaults to 1.",
+      "Export scale used when Figma renders a node directly (no imageRef/gifRef). Optional, defaults to 1. Must be between 0.01 and 4",
     ),
   customer_token: z
     .string()
